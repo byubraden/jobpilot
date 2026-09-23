@@ -1,5 +1,6 @@
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type Database from "better-sqlite3";
+import { revalidatePath } from "next/cache";
 import { MockProvider } from "../ai/mock-provider";
 import type { AIProvider, AIRequest, AIResponse } from "../ai/provider";
 import { createDatabase } from "../db/connection";
@@ -8,8 +9,10 @@ import {
   ProfileRepository, ResumeSuggestionsRepository,
 } from "../db/repositories";
 import { JobWorkflowCoordinator } from "../workflow/coordinator";
-import { createProvider, type ProviderSelectionKind } from "./container";
+import { createProvider, getServices, type ProviderSelectionKind } from "./container";
 import { JobService } from "./job-service";
+
+vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
 
 const candidate = {
   headline: "Junior software engineer",
@@ -55,7 +58,11 @@ beforeEach(() => {
   service = makeService();
   profiles.save(candidate);
 });
-afterEach(() => db.close());
+afterEach(() => {
+  db.close();
+  vi.unstubAllEnvs();
+  vi.clearAllMocks();
+});
 
 describe("JobService", () => {
   it("persists a new job before the coordinator invokes its provider", async () => {
@@ -74,7 +81,37 @@ describe("JobService", () => {
 
     expect(result.job.id).toBe(observedJobId);
     expect(jobs.get(result.job.id)?.description).toBe(description);
-    expect(result.workflow.steps.map((step) => step.status)).toEqual(["complete", "complete", "complete"]);
+    expect(result.workflow?.steps.map((step) => step.status)).toEqual(["complete", "complete", "complete"]);
+  });
+
+  it("returns the one saved job with a safe startup failure when the profile is missing", async () => {
+    db.prepare("DELETE FROM candidate_profiles").run();
+
+    const result = await service.createJob({ description }, "mock");
+
+    expect(jobs.list()).toHaveLength(1);
+    expect(result.job).toEqual(jobs.list()[0]);
+    expect(result.workflow).toBeNull();
+    expect(result.workflowStartFailure).toMatchObject({ code: "profile_required", message: expect.stringMatching(/profile/i) });
+    expect(JSON.parse(JSON.stringify(result))).toEqual(result);
+  });
+
+  it("does not expose unexpected workflow startup error details", async () => {
+    const failingService = new JobService({
+      profiles, jobs, runs, fitResults, resumeResults, applicationDrafts,
+      createCoordinator() {
+        return {
+          async run() { throw new Error("secret startup details"); },
+        } as unknown as JobWorkflowCoordinator;
+      },
+    });
+
+    const result = await failingService.createJob({ description }, "mock");
+
+    expect(jobs.list()).toHaveLength(1);
+    expect(result.job.id).toBe(jobs.list()[0].id);
+    expect(result.workflowStartFailure).toMatchObject({ code: "retry_analysis", message: expect.stringMatching(/retry/i) });
+    expect(JSON.stringify(result)).not.toContain("secret startup details");
   });
 
   it("rejects unknown application statuses without changing the stored job", () => {
@@ -115,5 +152,28 @@ describe("JobService", () => {
     expect(createProvider("mock").kind).toBe("mock");
     expect(() => createProvider("ollama")).toThrow(/not yet configured/i);
     expect(() => createProvider("anthropic")).toThrow(/not yet configured/i);
+  });
+});
+
+describe("createJobAction after workflow startup failure", () => {
+  it("returns the saved job and revalidates once without triggering a resubmission", async () => {
+    vi.stubEnv("DATABASE_PATH", ":memory:");
+    const { createJobAction } = await import("../../app/actions");
+    const form = new FormData();
+    form.set("description", description);
+    form.set("providerKind", "mock");
+
+    const result = await createJobAction(form);
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.data.job.id).toBeGreaterThan(0);
+    expect(result.data.workflow).toBeNull();
+    expect(result.data.workflowStartFailure?.code).toBe("profile_required");
+    expect(getServices().jobs.listJobs()).toHaveLength(1);
+    expect(revalidatePath).toHaveBeenCalledWith("/");
+    expect(revalidatePath).toHaveBeenCalledWith(`/jobs/${result.data.job.id}`);
+    expect(vi.mocked(revalidatePath).mock.calls).toHaveLength(2);
+    expect(JSON.parse(JSON.stringify(result))).toEqual(result);
   });
 });

@@ -1,6 +1,6 @@
 import type {
   AgentRunRepository, ApplicationDraftRepository, FitAnalysisRepository, JobRepository,
-  ProfileRepository, ResumeSuggestionsRepository,
+  JobRecord, ProfileRepository, ResumeSuggestionsRepository,
 } from "../db/repositories";
 import { AgentKindSchema, ApplicationStatusSchema, JobInputSchema, type AgentKind } from "../domain/schemas";
 import type { JobWorkflowCoordinator, WorkflowResult } from "../workflow/coordinator";
@@ -15,6 +15,19 @@ type Dependencies = {
   applicationDrafts: ApplicationDraftRepository;
   createCoordinator: (providerKind: ProviderSelectionKind) => JobWorkflowCoordinator;
 };
+
+export type CreateJobResult = {
+  job: JobRecord;
+  workflow: WorkflowResult | null;
+  workflowStartFailure: { code: "profile_required" | "retry_analysis"; message: string } | null;
+};
+
+function safeStartupFailure(error: unknown): NonNullable<CreateJobResult["workflowStartFailure"]> {
+  if (error instanceof Error && error.message === "Candidate profile is required before running agents") {
+    return { code: "profile_required", message: "Complete your candidate profile before analyzing this job." };
+  }
+  return { code: "retry_analysis", message: "Analysis could not start. Retry from the saved job." };
+}
 
 function resultView<T>(payload: T | null, profileVersion: number | null, currentProfileVersion: number | null) {
   if (payload === null) return null;
@@ -47,12 +60,16 @@ export class JobService {
     };
   }
 
-  async createJob(input: unknown, providerKind: ProviderSelectionKind) {
+  async createJob(input: unknown, providerKind: ProviderSelectionKind): Promise<CreateJobResult> {
     const parsed = JobInputSchema.parse(input);
     const coordinator = this.dependencies.createCoordinator(providerKind);
     const job = this.dependencies.jobs.create(parsed);
-    const workflow = await coordinator.run(job.id);
-    return { job, workflow, detail: this.getJobDetail(job.id) };
+    try {
+      const workflow = await coordinator.run(job.id);
+      return { job, workflow, workflowStartFailure: null };
+    } catch (error) {
+      return { job, workflow: null, workflowStartFailure: safeStartupFailure(error) };
+    }
   }
 
   async analyzeJob(id: number, providerKind: ProviderSelectionKind) {
