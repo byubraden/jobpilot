@@ -40,18 +40,21 @@ CREATE INDEX IF NOT EXISTS agent_runs_job_id_idx ON agent_runs(job_id);
 
 CREATE TABLE IF NOT EXISTS fit_analyses (
   job_id INTEGER PRIMARY KEY REFERENCES jobs(id) ON DELETE CASCADE,
+  profile_version INTEGER NOT NULL REFERENCES candidate_profiles(version),
   payload_json TEXT NOT NULL,
   updated_at TEXT NOT NULL
 );
 
 CREATE TABLE IF NOT EXISTS resume_suggestions (
   job_id INTEGER PRIMARY KEY REFERENCES jobs(id) ON DELETE CASCADE,
+  profile_version INTEGER NOT NULL REFERENCES candidate_profiles(version),
   payload_json TEXT NOT NULL,
   updated_at TEXT NOT NULL
 );
 
 CREATE TABLE IF NOT EXISTS application_drafts (
   job_id INTEGER PRIMARY KEY REFERENCES jobs(id) ON DELETE CASCADE,
+  profile_version INTEGER NOT NULL REFERENCES candidate_profiles(version),
   payload_json TEXT NOT NULL,
   updated_at TEXT NOT NULL
 );

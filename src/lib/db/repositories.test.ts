@@ -103,8 +103,7 @@ describe("agent runs", () => {
     const job = jobs.create(jobInput);
     const results = new FitAnalysisRepository(db);
     const completed = runs.start(job.id, "fit", "mock", "mock-v1", profile.version);
-    results.upsert(job.id, fit);
-    runs.complete(completed.id);
+    runs.completeWithResult(completed.id, { kind: "fit", payload: fit });
 
     const later = runs.start(job.id, "fit", "mock", "mock-v2", profile.version);
     expect(runs.fail(later.id, "Provider unavailable").status).toBe("failed");
@@ -122,27 +121,63 @@ describe("agent runs", () => {
 });
 
 describe("validated results", () => {
-  it("replaces fit results for the same job and agent kind", () => {
+  it("reports the source profile version after the profile changes", () => {
+    const profile = profiles.save(candidate);
     const job = jobs.create(jobInput);
     const results = new FitAnalysisRepository(db);
-    results.upsert(job.id, fit);
-    results.upsert(job.id, { ...fit, score: 91 });
+    const run = runs.start(job.id, "fit", "mock", "mock-v1", profile.version);
+    runs.completeWithResult(run.id, { kind: "fit", payload: fit });
+
+    expect(profiles.save({ ...candidate, headline: "Updated" }).version).toBe(2);
+    expect(results.get(job.id)).toEqual(fit);
+    expect(results.getProfileVersion(job.id)).toBe(1);
+  });
+
+  it("rolls back a retry's result replacement when completion fails", () => {
+    const profile = profiles.save(candidate);
+    const job = jobs.create(jobInput);
+    const results = new FitAnalysisRepository(db);
+    const first = runs.start(job.id, "fit", "mock", "mock-v1", profile.version);
+    runs.completeWithResult(first.id, { kind: "fit", payload: fit });
+
+    const retry = runs.start(job.id, "fit", "mock", "mock-v2", profile.version);
+    db.exec(`CREATE TRIGGER reject_retry_completion BEFORE UPDATE OF status ON agent_runs
+      WHEN NEW.id = ${retry.id} AND NEW.status = 'complete'
+      BEGIN SELECT RAISE(ABORT, 'simulated completion failure'); END;`);
+
+    expect(() => runs.completeWithResult(retry.id, { kind: "fit", payload: { ...fit, score: 95 } }))
+      .toThrow("simulated completion failure");
+    expect(results.get(job.id)).toEqual(fit);
+    expect(results.getProfileVersion(job.id)).toBe(1);
+    expect(runs.get(retry.id)?.status).toBe("running");
+
+    expect(runs.fail(retry.id, "Completion failed").status).toBe("failed");
+    expect(results.get(job.id)).toEqual(fit);
+  });
+
+  it("replaces fit results for the same job and agent kind", () => {
+    const profile = profiles.save(candidate);
+    const job = jobs.create(jobInput);
+    const results = new FitAnalysisRepository(db);
+    results.upsert(job.id, profile.version, fit);
+    results.upsert(job.id, profile.version, { ...fit, score: 91 });
     expect(results.get(job.id)?.score).toBe(91);
     expect(db.prepare("SELECT count(*) AS count FROM fit_analyses WHERE job_id = ?").get(job.id)).toEqual({ count: 1 });
   });
 
   it("keeps each kind's result separate and validates writes", () => {
+    const profile = profiles.save(candidate);
     const job = jobs.create(jobInput);
     const fits = new FitAnalysisRepository(db);
     const resumes = new ResumeSuggestionsRepository(db);
     const applications = new ApplicationDraftRepository(db);
-    fits.upsert(job.id, fit);
-    resumes.upsert(job.id, resume);
-    applications.upsert(job.id, draft);
+    fits.upsert(job.id, profile.version, fit);
+    resumes.upsert(job.id, profile.version, resume);
+    applications.upsert(job.id, profile.version, draft);
     expect(fits.get(job.id)).toEqual(fit);
     expect(resumes.get(job.id)).toEqual(resume);
     expect(applications.get(job.id)).toEqual(draft);
-    expect(() => fits.upsert(job.id, { ...fit, score: 101 })).toThrow();
+    expect(() => fits.upsert(job.id, profile.version, { ...fit, score: 101 })).toThrow();
     expect(fits.get(job.id)).toEqual(fit);
   });
 });

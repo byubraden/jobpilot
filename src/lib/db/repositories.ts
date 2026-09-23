@@ -46,6 +46,11 @@ export type AgentRunRecord = {
   finishedAt: string | null;
 };
 
+export type AgentResult =
+  | { kind: "fit"; payload: FitAnalysis }
+  | { kind: "resume"; payload: ResumeSuggestions }
+  | { kind: "application"; payload: ApplicationDraft };
+
 type ProfileRow = {
   id: number; version: number; headline: string; education_json: string;
   internships_json: string; projects_json: string; skills_json: string;
@@ -189,6 +194,27 @@ export class AgentRunRepository {
     return this.finish(id, "complete", null);
   }
 
+  completeWithResult(id: number, result: AgentResult): AgentRunRecord {
+    return this.db.transaction(() => {
+      const run = this.get(id);
+      if (!run || run.status !== "running") throw new Error(`Running agent run ${id} not found`);
+      if (run.kind !== result.kind) throw new Error(`Result kind ${result.kind} does not match run kind ${run.kind}`);
+
+      switch (result.kind) {
+        case "fit":
+          new FitAnalysisRepository(this.db).upsert(run.jobId, run.profileVersion, result.payload);
+          break;
+        case "resume":
+          new ResumeSuggestionsRepository(this.db).upsert(run.jobId, run.profileVersion, result.payload);
+          break;
+        case "application":
+          new ApplicationDraftRepository(this.db).upsert(run.jobId, run.profileVersion, result.payload);
+          break;
+      }
+      return this.complete(id);
+    })();
+  }
+
   fail(id: number, error: string): AgentRunRecord {
     if (!error.trim()) throw new Error("Failure reason is required");
     return this.finish(id, "failed", error);
@@ -205,17 +231,24 @@ export class AgentRunRepository {
 class ResultRepository<T> {
   constructor(private readonly db: Database.Database, private readonly table: string, private readonly schema: ZodType<T>) {}
 
-  upsert(jobId: number, input: T): T {
+  upsert(jobId: number, profileVersion: number, input: T): T {
     const value = this.schema.parse(input);
-    this.db.prepare(`INSERT INTO ${this.table} (job_id, payload_json, updated_at) VALUES (?, ?, ?)
-      ON CONFLICT(job_id) DO UPDATE SET payload_json = excluded.payload_json, updated_at = excluded.updated_at`)
-      .run(jobId, JSON.stringify(value), new Date().toISOString());
+    if (!Number.isInteger(profileVersion) || profileVersion < 1) throw new Error("Valid profile version is required");
+    this.db.prepare(`INSERT INTO ${this.table} (job_id, profile_version, payload_json, updated_at) VALUES (?, ?, ?, ?)
+      ON CONFLICT(job_id) DO UPDATE SET profile_version = excluded.profile_version,
+        payload_json = excluded.payload_json, updated_at = excluded.updated_at`)
+      .run(jobId, profileVersion, JSON.stringify(value), new Date().toISOString());
     return value;
   }
 
   get(jobId: number): T | null {
     const row = this.db.prepare(`SELECT payload_json FROM ${this.table} WHERE job_id = ?`).get(jobId) as { payload_json: string } | undefined;
     return row ? this.schema.parse(JSON.parse(row.payload_json)) : null;
+  }
+
+  getProfileVersion(jobId: number): number | null {
+    const row = this.db.prepare(`SELECT profile_version FROM ${this.table} WHERE job_id = ?`).get(jobId) as { profile_version: number } | undefined;
+    return row?.profile_version ?? null;
   }
 }
 
