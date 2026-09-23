@@ -50,34 +50,50 @@ function safeError(error: unknown): string {
 }
 
 export class JobWorkflowCoordinator {
+  private readonly activeJobs = new Set<number>();
+
   constructor(private readonly dependencies: JobWorkflowDependencies) {}
 
   async run(jobId: number): Promise<WorkflowResult> {
-    const { profile, job } = this.loadInputs(jobId);
-    return this.execute(jobId, profile, job, 0);
+    return this.withJobLock(jobId, () => {
+      const { profile, job } = this.loadInputs(jobId);
+      return this.execute(jobId, profile, job, 0);
+    });
   }
 
   async retry(jobId: number, kind: AgentKind): Promise<WorkflowResult> {
-    const { profile, job } = this.loadInputs(jobId);
-    const startIndex = sequence.indexOf(kind);
-    if (startIndex < 0) throw new Error(`Unknown agent kind: ${kind}`);
+    return this.withJobLock(jobId, () => {
+      const { profile, job } = this.loadInputs(jobId);
+      const startIndex = sequence.indexOf(kind);
+      if (startIndex < 0) throw new Error(`Unknown agent kind: ${kind}`);
 
-    const latestRuns = new Map<AgentKind, ReturnType<AgentRunRepository["listForJob"]>[number]>();
-    for (const run of this.dependencies.runs.listForJob(jobId)) {
-      if (!latestRuns.has(run.kind)) latestRuns.set(run.kind, run);
-    }
-    if (latestRuns.get(kind)?.status !== "failed") {
-      throw new Error(`No failed ${kind} step to retry for job ${jobId}`);
-    }
-    for (const priorKind of sequence.slice(0, startIndex)) {
-      const prior = latestRuns.get(priorKind);
-      const results = this.resultRepository(priorKind);
-      if (prior?.status !== "complete" || prior.profileVersion !== profile.version ||
-        results.get(jobId) === null || results.getProfileVersion(jobId) !== profile.version) {
-        throw new Error(`Cannot retry ${kind} without a completed ${priorKind} step for the current profile`);
+      const latestRuns = new Map<AgentKind, ReturnType<AgentRunRepository["listForJob"]>[number]>();
+      for (const run of this.dependencies.runs.listForJob(jobId)) {
+        if (!latestRuns.has(run.kind)) latestRuns.set(run.kind, run);
       }
+      if (latestRuns.get(kind)?.status !== "failed") {
+        throw new Error(`No failed ${kind} step to retry for job ${jobId}`);
+      }
+      for (const priorKind of sequence.slice(0, startIndex)) {
+        const prior = latestRuns.get(priorKind);
+        const results = this.resultRepository(priorKind);
+        if (prior?.status !== "complete" || prior.profileVersion !== profile.version ||
+          results.get(jobId) === null || results.getProfileVersion(jobId) !== profile.version) {
+          throw new Error(`Cannot retry ${kind} without a completed ${priorKind} step for the current profile`);
+        }
+      }
+      return this.execute(jobId, profile, job, startIndex);
+    });
+  }
+
+  private async withJobLock<T>(jobId: number, action: () => Promise<T>): Promise<T> {
+    if (this.activeJobs.has(jobId)) throw new Error(`Workflow already running for job ${jobId}`);
+    this.activeJobs.add(jobId);
+    try {
+      return await action();
+    } finally {
+      this.activeJobs.delete(jobId);
     }
-    return this.execute(jobId, profile, job, startIndex);
   }
 
   private loadInputs(jobId: number): { profile: CandidateProfileRecord; job: JobRecord } {
