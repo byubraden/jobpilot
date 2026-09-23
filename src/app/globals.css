@@ -125,7 +125,6 @@ textarea { resize: vertical; line-height: 1.5; }
 .workflow-actions { border-top: 1px solid #e5ede7; padding-top: 1rem; }
 .workflow-actions .provider-options { grid-template-columns: 1fr; }
 .workflow-actions .provider-option { min-height: auto; }
-.workflow-actions .provider-option small { display: none; }
 .workflow-actions .button, .inline-form .button { width: 100%; }
 .workflow-actions .button { margin-top: 1rem; }
 .inline-form { display: grid; gap: .5rem; }

@@ -5,9 +5,11 @@ import { useState, useTransition, type FormEvent } from "react";
 import type { ActionResult } from "../app/actions";
 import type { CreateJobResult } from "../lib/services/job-service";
 import type { ProviderSelectionKind } from "../lib/services/container";
+import type { AgentKind } from "../lib/domain/schemas";
 import { ProviderPicker } from "./provider-picker";
 
 type Props = { onCreate: (form: FormData) => Promise<ActionResult<CreateJobResult>> };
+const agentNames: Record<AgentKind, string> = { fit: "Fit analysis", resume: "Résumé agent", application: "Application draft" };
 
 export function JobForm({ onCreate }: Props) {
   const [provider, setProvider] = useState<ProviderSelectionKind>("mock");
@@ -21,11 +23,13 @@ export function JobForm({ onCreate }: Props) {
     startTransition(async () => setResult(await onCreate(form)));
   }
 
+  const failedStep = result?.ok ? result.data.workflow?.steps.find((step) => step.status === "failed") : undefined;
+
   if (result?.ok) return (
     <div className="card success-panel" role="status">
       <p className="eyebrow">Saved</p><h2>Job saved</h2>
-      {result.data.workflowStartFailure ? <p className="notice">{result.data.workflowStartFailure.message}</p> : <p>Your job and available analysis are ready for review.</p>}
-      <div className="button-row"><Link className="button button-primary" href={`/jobs/${result.data.job.id}`}>Open saved job</Link><Link className="button button-secondary" href="/profile">Complete profile</Link></div>
+      {result.data.workflowStartFailure ? <p className="notice">{result.data.workflowStartFailure.message}</p> : failedStep ? <p className="notice"><strong>{agentNames[failedStep.kind]} failed.</strong> {failedStep.error ?? "The agent could not complete this step."} Open the saved job to review and retry.</p> : <p>Your job and available analysis are ready for review.</p>}
+      <div className="button-row"><Link className="button button-primary" href={`/jobs/${result.data.job.id}`}>{failedStep ? "Review and retry agents" : "Open saved job"}</Link>{result.data.workflowStartFailure?.code === "profile_required" && <Link className="button button-secondary" href="/profile">Complete profile</Link>}</div>
     </div>
   );
 

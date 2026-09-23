@@ -26,6 +26,7 @@ export function ProviderPicker({ value, onChange, name = "providerKind" }: Props
           <span><strong>Demo · mock mode</strong><small>Uses deterministic fixtures for scores and job facts. No AI provider is called.</small></span>
         </label>
       </div>
+      {value === "ollama" && <p className="notice" role="note">Runs locally with Ollama. Your profile and job description stay on this machine.</p>}
       {value === "anthropic" && <p className="notice" role="note">This sends your profile and job description to Claude and uses API credit.</p>}
       {value === "mock" && <p className="notice" role="note">Mock mode: scores and extracted job facts are deterministic fixtures, not an assessment of this role.</p>}
     </fieldset>

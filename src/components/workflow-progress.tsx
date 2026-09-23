@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from "react";
 import type { ActionResult } from "../app/actions";
-import type { AgentRunRecord } from "../lib/db/repositories";
+import type { AgentRunRecord, JobRecord } from "../lib/db/repositories";
 import { ApplicationStatusSchema, type ApplicationStatus, type AgentKind } from "../lib/domain/schemas";
 import type { ProviderSelectionKind } from "../lib/services/container";
 import { ProviderPicker } from "./provider-picker";
@@ -14,6 +14,8 @@ const steps: { kind: AgentKind; label: string }[] = [
 ];
 
 type Mutation = (form: FormData) => Promise<ActionResult<unknown>>;
+type StatusMutation = (form: FormData) => Promise<ActionResult<JobRecord>>;
+type StatusProps = { jobId: number; status: ApplicationStatus; onUpdate: StatusMutation };
 
 export function WorkflowProgress({ jobId, runs, onRetry, onAnalyze }: { jobId: number; runs: AgentRunRecord[]; onRetry?: Mutation; onAnalyze?: Mutation }) {
   const [provider, setProvider] = useState<ProviderSelectionKind>("mock");
@@ -47,7 +49,12 @@ export function WorkflowProgress({ jobId, runs, onRetry, onAnalyze }: { jobId: n
   );
 }
 
-export function JobStatusControl({ jobId, status, onUpdate }: { jobId: number; status: ApplicationStatus; onUpdate: Mutation }) {
+export function JobStatusControl(props: StatusProps) {
+  return <StatusEditor key={`${props.jobId}:${props.status}`} {...props} />;
+}
+
+function StatusEditor({ jobId, status, onUpdate }: StatusProps) {
+  const [persistedStatus, setPersistedStatus] = useState<ApplicationStatus>(status);
   const [selected, setSelected] = useState<ApplicationStatus>(status);
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
@@ -58,8 +65,14 @@ export function JobStatusControl({ jobId, status, onUpdate }: { jobId: number; s
     setError(null);
     startTransition(async () => {
       const result = await onUpdate(form);
-      if (!result.ok) setError(result.formError ?? "Unable to update status.");
+      if (!result.ok) {
+        setError(result.formError ?? "Unable to update status.");
+        setSelected(persistedStatus);
+      } else {
+        setPersistedStatus(result.data.status);
+        setSelected(result.data.status);
+      }
     });
   }
-  return <div className="card status-control"><h2>Application status</h2><p className="field-help">Change this when you take the next step. Status transitions are checked on save.</p><div className="inline-form"><label htmlFor="job-status">Current status</label><select id="job-status" value={selected} onChange={(event) => setSelected(event.target.value as ApplicationStatus)}>{ApplicationStatusSchema.options.map((option) => <option key={option} value={option}>{option}</option>)}</select><button type="button" className="button button-secondary" disabled={pending || selected === status} onClick={save}>{pending ? "Saving…" : "Save status"}</button></div>{error && <p className="field-error" role="alert">{error}</p>}</div>;
+  return <div className="card status-control"><h2>Application status</h2><p className="field-help">Change this when you take the next step. Status transitions are checked on save.</p><div className="inline-form"><label htmlFor="job-status">Current status</label><select id="job-status" value={selected} onChange={(event) => { setSelected(event.target.value as ApplicationStatus); setError(null); }}>{ApplicationStatusSchema.options.map((option) => <option key={option} value={option}>{option}</option>)}</select><button type="button" className="button button-secondary" disabled={pending || selected === persistedStatus} onClick={save}>{pending ? "Saving…" : "Save status"}</button></div>{error && <p className="field-error" role="alert">{error}</p>}</div>;
 }

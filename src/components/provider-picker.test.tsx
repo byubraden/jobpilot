@@ -8,7 +8,7 @@ afterEach(cleanup);
 describe("ProviderPicker", () => {
   it("identifies local, credit-using, and deterministic choices", () => {
     render(<ProviderPicker value="ollama" onChange={() => {}} />);
-    expect(screen.getByText(/runs locally with ollama/i)).toBeVisible();
+    expect(screen.getByRole("note")).toHaveTextContent(/runs locally with ollama/i);
     expect(screen.getByText(/sending to claude uses api credit/i)).toBeVisible();
     expect(screen.getByText(/deterministic fixtures/i)).toBeVisible();
   });

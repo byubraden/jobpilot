@@ -13,6 +13,14 @@ describe("WorkflowProgress", () => {
     expect(screen.getByRole("button", { name: /retry résumé agent/i })).toBeVisible();
     expect(screen.getByText("Could not generate")).toBeVisible();
   });
+
+  it("keeps local and Claude disclosures visible in the detail workflow picker", () => {
+    render(<WorkflowProgress jobId={4} runs={[]} />);
+    fireEvent.click(screen.getByRole("radio", { name: /ollama/i }));
+    expect(screen.getByRole("note")).toHaveTextContent("Runs locally with Ollama. Your profile and job description stay on this machine.");
+    fireEvent.click(screen.getByRole("radio", { name: /claude/i }));
+    expect(screen.getByRole("note")).toHaveTextContent("This sends your profile and job description to Claude and uses API credit.");
+  });
 });
 
 describe("JobStatusControl", () => {
@@ -21,5 +29,15 @@ describe("JobStatusControl", () => {
     fireEvent.change(screen.getByLabelText(/current status/i), { target: { value: "applied" } });
     fireEvent.click(screen.getByRole("button", { name: /save status/i }));
     await waitFor(() => expect(screen.getByRole("alert")).toHaveTextContent("Invalid job status transition: offer → applied"));
+    expect(screen.getByLabelText(/current status/i)).toHaveValue("offer");
+    expect(screen.getByRole("button", { name: /save status/i })).toBeDisabled();
+  });
+
+  it("adopts the persisted status returned by a successful update", async () => {
+    render(<JobStatusControl jobId={4} status="found" onUpdate={vi.fn().mockResolvedValue({ ok: true, data: { status: "applied" } })} />);
+    fireEvent.change(screen.getByLabelText(/current status/i), { target: { value: "applied" } });
+    fireEvent.click(screen.getByRole("button", { name: /save status/i }));
+    await waitFor(() => expect(screen.getByRole("button", { name: /save status/i })).toBeDisabled());
+    expect(screen.getByLabelText(/current status/i)).toHaveValue("applied");
   });
 });
