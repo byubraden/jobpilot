@@ -29,7 +29,7 @@ export function JobForm({ onCreate }: Props) {
     <div className="card success-panel" role="status">
       <p className="eyebrow">Saved</p><h2>Job saved</h2>
       {result.data.workflowStartFailure ? <p className="notice">{result.data.workflowStartFailure.message}</p> : failedStep ? <p className="notice"><strong>{agentNames[failedStep.kind]} failed.</strong> {failedStep.error ?? "The agent could not complete this step."} Open the saved job to review and retry.</p> : <p>Your job and available analysis are ready for review.</p>}
-      <div className="button-row"><Link className="button button-primary" href={`/jobs/${result.data.job.id}`}>{failedStep ? "Review and retry agents" : "Open saved job"}</Link>{result.data.workflowStartFailure?.code === "profile_required" && <Link className="button button-secondary" href="/profile">Complete profile</Link>}</div>
+      <div className="button-row"><Link className="button button-primary" href={`/jobs/${result.data.job.id}`}>{failedStep ? "Review and retry agents" : "Open saved job"}</Link>{(result.data.workflowStartFailure || failedStep) && <Link className="button button-secondary" href="/profile">Complete profile</Link>}</div>
     </div>
   );
 

@@ -49,7 +49,25 @@ describe("JobForm", () => {
     expect(screen.getByText(/résumé agent failed/i)).toBeVisible();
     expect(screen.getByText(/AI response did not match the required format/i)).toBeVisible();
     expect(screen.getByRole("link", { name: /review and retry agents/i })).toHaveAttribute("href", "/jobs/12");
+    expect(screen.getByRole("link", { name: /complete profile/i })).toHaveAttribute("href", "/profile");
     expect(screen.queryByText(/analysis are ready for review/i)).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /save job/i })).not.toBeInTheDocument();
+  });
+
+  it("links to both the saved job and profile after a non-profile startup failure", async () => {
+    const onCreate = vi.fn().mockResolvedValue({
+      ok: true,
+      data: {
+        job: { id: 13, description: "C".repeat(200), status: "found", createdAt: "2026-01-01T00:00:00.000Z", updatedAt: "2026-01-01T00:00:00.000Z" },
+        workflow: null,
+        workflowStartFailure: { code: "retry_analysis", message: "Analysis could not start. Retry from the saved job." },
+      },
+    });
+    render(<JobForm onCreate={onCreate} />);
+    fireEvent.change(screen.getByRole("textbox", { name: "Job description" }), { target: { value: "C".repeat(200) } });
+    fireEvent.submit(screen.getByRole("button", { name: /save job/i }).closest("form")!);
+    await waitFor(() => expect(screen.getByRole("heading", { name: "Job saved" })).toBeVisible());
+    expect(screen.getByRole("link", { name: /open saved job/i })).toHaveAttribute("href", "/jobs/13");
+    expect(screen.getByRole("link", { name: /complete profile/i })).toHaveAttribute("href", "/profile");
   });
 });
