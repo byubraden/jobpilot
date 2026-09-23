@@ -1,1 +1,8 @@
 .worktrees/
+node_modules/
+.next/
+coverage/
+.env.local
+data/*.sqlite*
+test-results/
+*.tsbuildinfo
