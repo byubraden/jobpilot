@@ -1,5 +1,5 @@
 import type { AgentKind } from "../domain/schemas";
-import { AIValidationError, type AIProvider, type AIRequest, type AIResponse } from "./provider";
+import { AIUnavailableError, AIValidationError, type AIProvider, type AIRequest, type AIResponse } from "./provider";
 
 type MockOptions = {
   fixtures?: Partial<Record<AgentKind, unknown>>;
@@ -40,7 +40,9 @@ export class MockProvider implements AIProvider {
 
   async generate<T>(request: AIRequest<T>): Promise<AIResponse<T>> {
     const error = this.options.errors?.[request.task];
-    if (error) throw error;
+    if (error) {
+      throw error instanceof AIValidationError ? new AIValidationError() : new AIUnavailableError();
+    }
 
     const fixture = Object.hasOwn(this.options.fixtures ?? {}, request.task)
       ? this.options.fixtures?.[request.task]
