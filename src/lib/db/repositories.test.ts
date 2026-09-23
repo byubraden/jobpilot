@@ -1,5 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import type Database from "better-sqlite3";
+import Database from "better-sqlite3";
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { JobInputSchema } from "../domain/schemas";
 import { createDatabase } from "./connection";
 import {
@@ -48,6 +51,64 @@ beforeEach(() => {
 });
 
 afterEach(() => db.close());
+
+describe("database upgrades", () => {
+  it("preserves legacy results with unknown provenance and accepts versioned writes", () => {
+    const directory = mkdtempSync(join(tmpdir(), "jobpilot-db-upgrade-"));
+    const path = join(directory, "legacy.sqlite");
+    let opened: Database.Database | undefined;
+
+    try {
+      opened = new Database(path);
+      opened.exec(`
+        CREATE TABLE jobs (
+          id INTEGER PRIMARY KEY, description TEXT NOT NULL, source_url TEXT,
+          status TEXT NOT NULL, created_at TEXT NOT NULL, updated_at TEXT NOT NULL
+        );
+        CREATE TABLE fit_analyses (
+          job_id INTEGER PRIMARY KEY REFERENCES jobs(id) ON DELETE CASCADE,
+          payload_json TEXT NOT NULL, updated_at TEXT NOT NULL
+        );
+        CREATE TABLE resume_suggestions (
+          job_id INTEGER PRIMARY KEY REFERENCES jobs(id) ON DELETE CASCADE,
+          payload_json TEXT NOT NULL, updated_at TEXT NOT NULL
+        );
+        CREATE TABLE application_drafts (
+          job_id INTEGER PRIMARY KEY REFERENCES jobs(id) ON DELETE CASCADE,
+          payload_json TEXT NOT NULL, updated_at TEXT NOT NULL
+        );
+      `);
+      opened.prepare("INSERT INTO jobs (id, description, status, created_at, updated_at) VALUES (1, ?, 'found', ?, ?)")
+        .run(jobInput.description, "2026-01-01T00:00:00.000Z", "2026-01-01T00:00:00.000Z");
+      opened.prepare("INSERT INTO fit_analyses (job_id, payload_json, updated_at) VALUES (1, ?, ?)")
+        .run(JSON.stringify(fit), "2026-01-01T00:00:00.000Z");
+      opened.close();
+      opened = undefined;
+
+      opened = createDatabase(path);
+      const fits = new FitAnalysisRepository(opened);
+      expect(fits.get(1)).toEqual(fit);
+      expect(fits.getProfileVersion(1)).toBeNull();
+
+      const profile = new ProfileRepository(opened).save(candidate);
+      fits.upsert(1, profile.version, { ...fit, score: 91 });
+      new ResumeSuggestionsRepository(opened).upsert(1, profile.version, resume);
+      new ApplicationDraftRepository(opened).upsert(1, profile.version, draft);
+      expect(fits.getProfileVersion(1)).toBe(1);
+      expect(new ResumeSuggestionsRepository(opened).getProfileVersion(1)).toBe(1);
+      expect(new ApplicationDraftRepository(opened).getProfileVersion(1)).toBe(1);
+      opened.close();
+      opened = undefined;
+
+      opened = createDatabase(path);
+      expect(new FitAnalysisRepository(opened).get(1)?.score).toBe(91);
+      expect(new FitAnalysisRepository(opened).getProfileVersion(1)).toBe(1);
+    } finally {
+      opened?.close();
+      rmSync(directory, { recursive: true, force: true });
+    }
+  });
+});
 
 describe("profiles", () => {
   it("increments versions and returns the latest profile", () => {
