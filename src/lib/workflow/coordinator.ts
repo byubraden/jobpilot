@@ -22,6 +22,7 @@ import {
 } from "../domain/schemas";
 
 const sequence: AgentKind[] = ["fit", "resume", "application"];
+const activeJobs = new Set<number>();
 
 export type WorkflowStep = {
   kind: AgentKind;
@@ -50,8 +51,6 @@ function safeError(error: unknown): string {
 }
 
 export class JobWorkflowCoordinator {
-  private readonly activeJobs = new Set<number>();
-
   constructor(private readonly dependencies: JobWorkflowDependencies) {}
 
   async run(jobId: number): Promise<WorkflowResult> {
@@ -87,12 +86,12 @@ export class JobWorkflowCoordinator {
   }
 
   private async withJobLock<T>(jobId: number, action: () => Promise<T>): Promise<T> {
-    if (this.activeJobs.has(jobId)) throw new Error(`Workflow already running for job ${jobId}`);
-    this.activeJobs.add(jobId);
+    if (activeJobs.has(jobId)) throw new Error(`Workflow already running for job ${jobId}`);
+    activeJobs.add(jobId);
     try {
       return await action();
     } finally {
-      this.activeJobs.delete(jobId);
+      activeJobs.delete(jobId);
     }
   }
 

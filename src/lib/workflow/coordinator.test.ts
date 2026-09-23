@@ -155,7 +155,7 @@ describe("job workflow coordinator", () => {
     expect(runs.listForJob(job.id)[0]).toMatchObject({ kind: "fit", status: "failed", profileVersion: currentProfile.version });
   });
 
-  it("rejects an overlapping call for the same job while another job can proceed", async () => {
+  it("rejects an overlapping call across coordinator instances while another job can proceed", async () => {
     profiles.save(candidate);
     const firstJob = jobs.create(jobInput);
     const secondJob = jobs.create(JobInputSchema.parse({ description: "A different engineering role requiring React. ".repeat(5) }));
@@ -177,16 +177,17 @@ describe("job workflow coordinator", () => {
       },
     };
     coordinator = makeCoordinator(gatedProvider);
+    const secondCoordinator = makeCoordinator(gatedProvider);
 
     const first = coordinator.run(firstJob.id);
     await started;
     try {
-      await expect(coordinator.run(firstJob.id)).rejects.toThrow(/already running/i);
-      await expect(coordinator.retry(firstJob.id, "resume")).rejects.toThrow(/already running/i);
+      await expect(secondCoordinator.run(firstJob.id)).rejects.toThrow(/already running/i);
+      await expect(secondCoordinator.retry(firstJob.id, "resume")).rejects.toThrow(/already running/i);
       expect(entered).toEqual(["fit"]);
       expect(runs.listForJob(firstJob.id)).toHaveLength(1);
 
-      const independent = coordinator.run(secondJob.id);
+      const independent = secondCoordinator.run(secondJob.id);
       expect(entered).toEqual(["fit", "fit"]);
       expect((await independent).steps.map((step) => step.status)).toEqual(["complete", "complete", "complete"]);
       expect(runs.listForJob(firstJob.id)[0].status).toBe("running");
@@ -196,7 +197,7 @@ describe("job workflow coordinator", () => {
     }
 
     expect(runs.listForJob(firstJob.id).map((run) => run.status)).toEqual(["complete", "complete", "complete"]);
-    expect((await coordinator.run(firstJob.id)).steps.map((step) => step.status)).toEqual(["complete", "complete", "complete"]);
+    expect((await secondCoordinator.run(firstJob.id)).steps.map((step) => step.status)).toEqual(["complete", "complete", "complete"]);
   });
 
   it("rolls back a generated result when run completion fails", async () => {
