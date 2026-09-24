@@ -114,6 +114,24 @@ describe("JobService", () => {
     expect(JSON.stringify(result)).not.toContain("secret startup details");
   });
 
+  it("saves the job when coordinator construction fails", async () => {
+    const failingService = new JobService({
+      profiles, jobs, runs, fitResults, resumeResults, applicationDrafts,
+      createCoordinator() { throw new Error("secret constructor details"); },
+    });
+
+    const result = await failingService.createJob({ description }, "ollama");
+
+    expect(jobs.list()).toHaveLength(1);
+    expect(result.job).toEqual(jobs.list()[0]);
+    expect(result.workflow).toBeNull();
+    expect(result.workflowStartFailure).toEqual({
+      code: "retry_analysis",
+      message: "Analysis could not start. Retry from the saved job.",
+    });
+    expect(JSON.stringify(result)).not.toContain("secret constructor details");
+  });
+
   it("rejects unknown application statuses without changing the stored job", () => {
     const job = jobs.create({ description, status: "found" });
     expect(() => service.changeJobStatus(job.id, "invented")).toThrow();
@@ -146,6 +164,22 @@ describe("JobService", () => {
     expect(detail?.resume).toMatchObject({ profileVersion: 1, isStale: true });
     expect(detail?.application).toMatchObject({ profileVersion: 1, isStale: true });
     expect(detail?.fit?.payload.score).toBe(82);
+  });
+
+  it("marks retained same-profile downstream results as previous-attempt data", async () => {
+    const created = await service.createJob({ description }, "mock");
+    provider = new MockProvider({ errors: { resume: new Error("offline") } });
+
+    const result = await service.analyzeJob(created.job.id, "mock");
+
+    expect(result.workflow.steps.map((step) => step.status)).toEqual(["complete", "failed", "pending"]);
+    const detail = service.getJobDetail(created.job.id);
+    expect(detail?.fit).toMatchObject({ profileVersion: 1, isStale: false, isPreviousAttempt: false, isPreviousProfile: false });
+    expect(detail?.resume).toMatchObject({ profileVersion: 1, isStale: true, isPreviousAttempt: true, isPreviousProfile: false });
+    expect(detail?.application).toMatchObject({ profileVersion: 1, isStale: true, isPreviousAttempt: true, isPreviousProfile: false });
+    expect(detail?.latestAttemptId).toBe(2);
+    expect(detail?.runs.filter((run) => run.attemptId === detail.latestAttemptId).map((run) => run.status))
+      .toEqual(["failed", "complete"]);
   });
 
   it("creates only the explicitly selected local provider", () => {

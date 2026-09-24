@@ -17,8 +17,8 @@ type Mutation = (form: FormData) => Promise<ActionResult<unknown>>;
 type StatusMutation = (form: FormData) => Promise<ActionResult<JobRecord>>;
 type StatusProps = { jobId: number; status: ApplicationStatus; onUpdate: StatusMutation };
 
-export function WorkflowProgress({ jobId, runs, onRetry, onAnalyze }: { jobId: number; runs: AgentRunRecord[]; onRetry?: Mutation; onAnalyze?: Mutation }) {
-  const [provider, setProvider] = useState<ProviderSelectionKind>("mock");
+export function WorkflowProgress({ jobId, runs, latestAttemptId, onRetry, onAnalyze }: { jobId: number; runs: AgentRunRecord[]; latestAttemptId?: number | null; onRetry?: Mutation; onAnalyze?: Mutation }) {
+  const [provider, setProvider] = useState<ProviderSelectionKind>("ollama");
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
 
@@ -40,7 +40,7 @@ export function WorkflowProgress({ jobId, runs, onRetry, onAnalyze }: { jobId: n
       <div className="section-heading compact"><div><p className="eyebrow">AI assistance</p><h2 id="workflow-heading">Workflow progress</h2></div></div>
       <ol className="step-list">
         {steps.map(({ kind, label }) => {
-          const latest = runs.find((run) => run.kind === kind);
+          const latest = runs.find((run) => run.kind === kind && (latestAttemptId == null || run.attemptId === latestAttemptId));
           return <li key={kind} className="step"><div className="step-info"><strong>{label}</strong><span className={`status status-${latest?.status ?? "pending"}`}>{latest?.status ?? "not started"}</span>{latest?.provider === "mock" && <small className="fixture-note">Mock fixture result</small>}{latest?.status === "failed" && latest.error && <p className="field-error">{latest.error}</p>}</div>{latest?.status === "failed" && <button type="button" className="button button-secondary" disabled={pending} onClick={() => run(onRetry, kind)}>Retry {label}</button>}</li>;
         })}
       </ol>

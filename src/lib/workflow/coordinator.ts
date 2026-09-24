@@ -118,6 +118,7 @@ export class JobWorkflowCoordinator {
     job: JobRecord,
     startIndex: number,
   ): Promise<WorkflowResult> {
+    const attemptId = this.dependencies.runs.nextAttemptId(jobId);
     const steps: WorkflowStep[] = sequence.map((kind, index) => ({
       kind,
       status: index < startIndex ? "complete" : "pending",
@@ -126,7 +127,7 @@ export class JobWorkflowCoordinator {
 
     for (let index = startIndex; index < sequence.length; index++) {
       const kind = sequence[index];
-      const step = await this.executeStep(jobId, kind, profile, job);
+      const step = await this.executeStep(jobId, kind, profile, job, attemptId);
       steps[index] = step;
       if (step.status === "failed") break;
     }
@@ -138,9 +139,10 @@ export class JobWorkflowCoordinator {
     kind: AgentKind,
     profile: CandidateProfileRecord,
     job: JobRecord,
+    attemptId: number,
   ): Promise<WorkflowStep> {
     const { provider, runs, fitResults } = this.dependencies;
-    const run = runs.start(jobId, kind, provider.kind, provider.model, profile.version);
+    const run = runs.start(jobId, kind, provider.kind, provider.model, profile.version, attemptId);
     try {
       let result: AgentResult;
       switch (kind) {

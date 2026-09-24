@@ -60,7 +60,10 @@ export const FitAnalysisSchema = z.strictObject({
   })),
   gaps: z.array(nonEmptyText),
   concerns: z.array(nonEmptyText),
-});
+}).refine(
+  ({ strengths, gaps, concerns }) => strengths.length + gaps.length + concerns.length > 0,
+  { message: "Fit analysis must include at least one supported strength, gap, or concern" },
+);
 export type FitAnalysis = z.infer<typeof FitAnalysisSchema>;
 
 export const ResumeSuggestionsSchema = z.strictObject({

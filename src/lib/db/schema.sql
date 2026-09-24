@@ -30,6 +30,7 @@ CREATE TABLE IF NOT EXISTS agent_runs (
   provider TEXT NOT NULL CHECK (provider IN ('ollama', 'claude', 'mock')),
   model TEXT NOT NULL,
   profile_version INTEGER NOT NULL REFERENCES candidate_profiles(version),
+  attempt_id INTEGER NOT NULL DEFAULT 1 CHECK (attempt_id > 0),
   status TEXT NOT NULL CHECK (status IN ('pending', 'running', 'complete', 'failed')),
   error TEXT,
   started_at TEXT NOT NULL,
@@ -41,6 +42,7 @@ CREATE INDEX IF NOT EXISTS agent_runs_job_id_idx ON agent_runs(job_id);
 CREATE TABLE IF NOT EXISTS fit_analyses (
   job_id INTEGER PRIMARY KEY REFERENCES jobs(id) ON DELETE CASCADE,
   profile_version INTEGER NOT NULL REFERENCES candidate_profiles(version),
+  attempt_id INTEGER NOT NULL DEFAULT 1 CHECK (attempt_id > 0),
   payload_json TEXT NOT NULL,
   updated_at TEXT NOT NULL
 );
@@ -48,6 +50,7 @@ CREATE TABLE IF NOT EXISTS fit_analyses (
 CREATE TABLE IF NOT EXISTS resume_suggestions (
   job_id INTEGER PRIMARY KEY REFERENCES jobs(id) ON DELETE CASCADE,
   profile_version INTEGER NOT NULL REFERENCES candidate_profiles(version),
+  attempt_id INTEGER NOT NULL DEFAULT 1 CHECK (attempt_id > 0),
   payload_json TEXT NOT NULL,
   updated_at TEXT NOT NULL
 );
@@ -55,6 +58,7 @@ CREATE TABLE IF NOT EXISTS resume_suggestions (
 CREATE TABLE IF NOT EXISTS application_drafts (
   job_id INTEGER PRIMARY KEY REFERENCES jobs(id) ON DELETE CASCADE,
   profile_version INTEGER NOT NULL REFERENCES candidate_profiles(version),
+  attempt_id INTEGER NOT NULL DEFAULT 1 CHECK (attempt_id > 0),
   payload_json TEXT NOT NULL,
   updated_at TEXT NOT NULL
 );

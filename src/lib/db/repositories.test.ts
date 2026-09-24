@@ -154,9 +154,20 @@ describe("agent runs", () => {
     const run = runs.start(job.id, "fit", "mock", "mock-v1", profile.version);
     expect(run.status).toBe("running");
     expect(run.profileVersion).toBe(1);
+    expect(run.attemptId).toBe(1);
     expect(run.model).toBe("mock-v1");
     expect(runs.complete(run.id).status).toBe("complete");
     expect(runs.get(run.id)?.status).toBe("complete");
+  });
+
+  it("allocates increasing workflow attempt IDs per job", () => {
+    const profile = profiles.save(candidate);
+    const firstJob = jobs.create(jobInput);
+    const secondJob = jobs.create(jobInput);
+    expect(runs.nextAttemptId(firstJob.id)).toBe(1);
+    runs.start(firstJob.id, "fit", "mock", "mock-v1", profile.version, 1);
+    expect(runs.nextAttemptId(firstJob.id)).toBe(2);
+    expect(runs.nextAttemptId(secondJob.id)).toBe(1);
   });
 
   it("records failure without changing a completed fit result", () => {

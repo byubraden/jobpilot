@@ -40,6 +40,7 @@ export type AgentRunRecord = {
   provider: ProviderKind;
   model: string;
   profileVersion: number;
+  attemptId: number;
   status: RunStatus;
   error: string | null;
   startedAt: string;
@@ -63,6 +64,7 @@ type JobRow = {
 type RunRow = {
   id: number; job_id: number; kind: string; provider: string; model: string;
   profile_version: number; status: string; error: string | null;
+  attempt_id: number;
   started_at: string; finished_at: string | null;
 };
 
@@ -96,6 +98,7 @@ function mapRun(row: RunRow): AgentRunRecord {
     provider: ProviderKindSchema.parse(row.provider),
     model: row.model,
     profileVersion: row.profile_version,
+    attemptId: row.attempt_id,
     status: RunStatusSchema.parse(row.status),
     error: row.error,
     startedAt: row.started_at,
@@ -170,14 +173,21 @@ export class JobRepository {
 export class AgentRunRepository {
   constructor(private readonly db: Database.Database) {}
 
-  start(jobId: number, kind: AgentKind, provider: ProviderKind, model: string, profileVersion: number): AgentRunRecord {
+  nextAttemptId(jobId: number): number {
+    const row = this.db.prepare("SELECT COALESCE(MAX(attempt_id), 0) + 1 AS next FROM agent_runs WHERE job_id = ?")
+      .get(jobId) as { next: number };
+    return row.next;
+  }
+
+  start(jobId: number, kind: AgentKind, provider: ProviderKind, model: string, profileVersion: number, attemptId = 1): AgentRunRecord {
     const validKind = AgentKindSchema.parse(kind);
     const validProvider = ProviderKindSchema.parse(provider);
     if (!model.trim()) throw new Error("Model is required");
     if (!Number.isInteger(profileVersion) || profileVersion < 1) throw new Error("Valid profile version is required");
+    if (!Number.isInteger(attemptId) || attemptId < 1) throw new Error("Valid attempt ID is required");
     const result = this.db.prepare(`INSERT INTO agent_runs
-      (job_id, kind, provider, model, profile_version, status, started_at)
-      VALUES (?, ?, ?, ?, ?, 'running', ?)`).run(jobId, validKind, validProvider, model, profileVersion, new Date().toISOString());
+      (job_id, kind, provider, model, profile_version, attempt_id, status, started_at)
+      VALUES (?, ?, ?, ?, ?, ?, 'running', ?)`).run(jobId, validKind, validProvider, model, profileVersion, attemptId, new Date().toISOString());
     return this.get(Number(result.lastInsertRowid))!;
   }
 
@@ -202,13 +212,13 @@ export class AgentRunRepository {
 
       switch (result.kind) {
         case "fit":
-          new FitAnalysisRepository(this.db).upsert(run.jobId, run.profileVersion, result.payload);
+          new FitAnalysisRepository(this.db).upsert(run.jobId, run.profileVersion, result.payload, run.attemptId);
           break;
         case "resume":
-          new ResumeSuggestionsRepository(this.db).upsert(run.jobId, run.profileVersion, result.payload);
+          new ResumeSuggestionsRepository(this.db).upsert(run.jobId, run.profileVersion, result.payload, run.attemptId);
           break;
         case "application":
-          new ApplicationDraftRepository(this.db).upsert(run.jobId, run.profileVersion, result.payload);
+          new ApplicationDraftRepository(this.db).upsert(run.jobId, run.profileVersion, result.payload, run.attemptId);
           break;
       }
       return this.complete(id);
@@ -231,13 +241,14 @@ export class AgentRunRepository {
 class ResultRepository<T> {
   constructor(private readonly db: Database.Database, private readonly table: string, private readonly schema: ZodType<T>) {}
 
-  upsert(jobId: number, profileVersion: number, input: T): T {
+  upsert(jobId: number, profileVersion: number, input: T, attemptId = 1): T {
     const value = this.schema.parse(input);
     if (!Number.isInteger(profileVersion) || profileVersion < 1) throw new Error("Valid profile version is required");
-    this.db.prepare(`INSERT INTO ${this.table} (job_id, profile_version, payload_json, updated_at) VALUES (?, ?, ?, ?)
+    if (!Number.isInteger(attemptId) || attemptId < 1) throw new Error("Valid attempt ID is required");
+    this.db.prepare(`INSERT INTO ${this.table} (job_id, profile_version, attempt_id, payload_json, updated_at) VALUES (?, ?, ?, ?, ?)
       ON CONFLICT(job_id) DO UPDATE SET profile_version = excluded.profile_version,
-        payload_json = excluded.payload_json, updated_at = excluded.updated_at`)
-      .run(jobId, profileVersion, JSON.stringify(value), new Date().toISOString());
+        attempt_id = excluded.attempt_id, payload_json = excluded.payload_json, updated_at = excluded.updated_at`)
+      .run(jobId, profileVersion, attemptId, JSON.stringify(value), new Date().toISOString());
     return value;
   }
 
@@ -249,6 +260,11 @@ class ResultRepository<T> {
   getProfileVersion(jobId: number): number | null {
     const row = this.db.prepare(`SELECT profile_version FROM ${this.table} WHERE job_id = ?`).get(jobId) as { profile_version: number } | undefined;
     return row?.profile_version ?? null;
+  }
+
+  getAttemptId(jobId: number): number | null {
+    const row = this.db.prepare(`SELECT attempt_id FROM ${this.table} WHERE job_id = ?`).get(jobId) as { attempt_id: number | null } | undefined;
+    return row?.attempt_id ?? null;
   }
 }
 

@@ -14,6 +14,13 @@ export function createDatabase(path: string): Database.Database {
           // Historical payloads have no reliable source version; NULL records that fact.
           db.exec(`ALTER TABLE ${table} ADD COLUMN profile_version INTEGER REFERENCES candidate_profiles(version)`);
         }
+        if (!columns.some(({ name }) => name === "attempt_id")) {
+          db.exec(`ALTER TABLE ${table} ADD COLUMN attempt_id INTEGER DEFAULT 1`);
+        }
+      }
+      const runColumns = db.pragma("table_info(agent_runs)") as { name: string }[];
+      if (runColumns.length > 0 && !runColumns.some(({ name }) => name === "attempt_id")) {
+        db.exec("ALTER TABLE agent_runs ADD COLUMN attempt_id INTEGER NOT NULL DEFAULT 1");
       }
     })();
     return db;

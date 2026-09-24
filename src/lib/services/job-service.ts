@@ -29,12 +29,17 @@ function safeStartupFailure(error: unknown): NonNullable<CreateJobResult["workfl
   return { code: "retry_analysis", message: "Analysis could not start. Retry from the saved job." };
 }
 
-function resultView<T>(payload: T | null, profileVersion: number | null, currentProfileVersion: number | null) {
+function resultView<T>(payload: T | null, profileVersion: number | null, currentProfileVersion: number | null, attemptId: number | null, latestAttemptId: number | null) {
   if (payload === null) return null;
+  const isPreviousAttempt = latestAttemptId !== null && attemptId !== latestAttemptId;
+  const isPreviousProfile = profileVersion === null || profileVersion !== currentProfileVersion;
   return {
     payload,
     profileVersion,
-    isStale: profileVersion === null || profileVersion !== currentProfileVersion,
+    attemptId,
+    isPreviousAttempt,
+    isPreviousProfile,
+    isStale: isPreviousProfile || isPreviousAttempt,
   };
 }
 
@@ -50,21 +55,24 @@ export class JobService {
     const job = jobs.get(id);
     if (!job) return null;
     const currentProfileVersion = profiles.getCurrent()?.version ?? null;
+    const jobRuns = runs.listForJob(id);
+    const latestAttemptId = jobRuns[0]?.attemptId ?? null;
     return {
       job,
       currentProfileVersion,
-      runs: runs.listForJob(id),
-      fit: resultView(fitResults.get(id), fitResults.getProfileVersion(id), currentProfileVersion),
-      resume: resultView(resumeResults.get(id), resumeResults.getProfileVersion(id), currentProfileVersion),
-      application: resultView(applicationDrafts.get(id), applicationDrafts.getProfileVersion(id), currentProfileVersion),
+      latestAttemptId,
+      runs: jobRuns,
+      fit: resultView(fitResults.get(id), fitResults.getProfileVersion(id), currentProfileVersion, fitResults.getAttemptId(id), latestAttemptId),
+      resume: resultView(resumeResults.get(id), resumeResults.getProfileVersion(id), currentProfileVersion, resumeResults.getAttemptId(id), latestAttemptId),
+      application: resultView(applicationDrafts.get(id), applicationDrafts.getProfileVersion(id), currentProfileVersion, applicationDrafts.getAttemptId(id), latestAttemptId),
     };
   }
 
   async createJob(input: unknown, providerKind: ProviderSelectionKind): Promise<CreateJobResult> {
     const parsed = JobInputSchema.parse(input);
-    const coordinator = this.dependencies.createCoordinator(providerKind);
     const job = this.dependencies.jobs.create(parsed);
     try {
+      const coordinator = this.dependencies.createCoordinator(providerKind);
       const workflow = await coordinator.run(job.id);
       return { job, workflow, workflowStartFailure: null };
     } catch (error) {

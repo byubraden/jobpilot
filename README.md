@@ -4,7 +4,7 @@ JobPilot is a local application workspace for saving job descriptions, reviewing
 
 ## Local setup
 
-1. Install Node.js 20.9 or newer and npm. From this directory, run `npm install`.
+1. Install Node.js 24 or newer and npm. From this directory, run `npm install`.
 2. Install [Ollama](https://ollama.com/download), start the Ollama app or run `ollama serve`, then download the default model:
 
    ```bash
@@ -19,7 +19,7 @@ JobPilot is a local application workspace for saving job descriptions, reviewing
 
    The example selects `qwen3:8b` at `http://127.0.0.1:11434` and stores data in `./data/jobpilot.sqlite`. Change `OLLAMA_BASE_URL`, `OLLAMA_MODEL`, or `DATABASE_PATH` in `.env.local` if your setup differs. The provider picker in the app determines which provider runs for each job; `AI_PROVIDER` in the example file does not override that choice.
 
-4. Start JobPilot with `npm run dev` and open [http://localhost:3000](http://localhost:3000). Create a candidate profile using only facts you can verify, then paste a job description of at least 200 characters. Choose **Ollama · local** to run the three agents. The saved job shows fit analysis, résumé suggestions, an application draft, and status controls.
+4. Start JobPilot with `npm run dev` and open [http://127.0.0.1:3000](http://127.0.0.1:3000). The default development and production commands bind only to `127.0.0.1`; pass a deliberate `-H` value directly to Next.js if you need wider network access. Create a candidate profile using only facts you can verify, then paste a job description of at least 200 characters. **Ollama · local** is selected by default to run the three agents. The saved job shows fit analysis, résumé suggestions, an application draft, and status controls.
 
 The SQLite database is created automatically at the configured `DATABASE_PATH`, relative to the project directory unless you provide an absolute path. The default file is `data/jobpilot.sqlite`; it is ignored by Git. Back it up before deleting it. Set a different `DATABASE_PATH` to keep separate workspaces.
 

@@ -12,7 +12,7 @@ type Props = { onCreate: (form: FormData) => Promise<ActionResult<CreateJobResul
 const agentNames: Record<AgentKind, string> = { fit: "Fit analysis", resume: "Résumé agent", application: "Application draft" };
 
 export function JobForm({ onCreate }: Props) {
-  const [provider, setProvider] = useState<ProviderSelectionKind>("mock");
+  const [provider, setProvider] = useState<ProviderSelectionKind>("ollama");
   const [result, setResult] = useState<ActionResult<CreateJobResult> | null>(null);
   const [pending, startTransition] = useTransition();
 

@@ -99,6 +99,27 @@ describe("job workflow coordinator", () => {
     expect(runs.listForJob(job.id)[0].error).not.toContain("secret provider details");
   });
 
+  it("rejects unsupported fit output before persistence or downstream generation", async () => {
+    profiles.save(candidate);
+    const job = jobs.create(jobInput);
+    provider.fixtures.fit = {
+      job: { title: "Engineer", company: "Example", location: "Remote", requiredSkills: [] },
+      score: 0,
+      recommendation: "skip",
+      strengths: [],
+      gaps: [],
+      concerns: [],
+    };
+
+    const result = await coordinator.run(job.id);
+
+    expect(result.steps.map((step) => step.status)).toEqual(["failed", "pending", "pending"]);
+    expect(provider.tasks).toEqual(["fit"]);
+    expect(fitResults.get(job.id)).toBeNull();
+    expect(resumeResults.get(job.id)).toBeNull();
+    expect(applicationDrafts.get(job.id)).toBeNull();
+  });
+
   it("retries résumé and its dependent application without rerunning fit", async () => {
     profiles.save(candidate);
     const job = jobs.create(jobInput);

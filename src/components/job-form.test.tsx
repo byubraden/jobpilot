@@ -5,6 +5,16 @@ import { JobForm } from "./job-form";
 afterEach(cleanup);
 
 describe("JobForm", () => {
+  it("defaults job analysis to local Ollama and submits that selection", async () => {
+    const onCreate = vi.fn().mockResolvedValue({ ok: false, formError: "offline" });
+    render(<JobForm onCreate={onCreate} />);
+    expect(screen.getByRole("radio", { name: /ollama/i })).toBeChecked();
+    fireEvent.change(screen.getByRole("textbox", { name: "Job description" }), { target: { value: "A".repeat(200) } });
+    fireEvent.submit(screen.getByRole("button", { name: /save job/i }).closest("form")!);
+    await waitFor(() => expect(onCreate).toHaveBeenCalledOnce());
+    expect(onCreate.mock.calls[0][0].get("providerKind")).toBe("ollama");
+  });
+
   it("requires a substantial description and exposes optional URL", () => {
     render(<JobForm onCreate={vi.fn()} />);
     expect(screen.getByRole("textbox", { name: "Job description" })).toHaveAttribute("minLength", "200");

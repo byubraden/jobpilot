@@ -81,6 +81,11 @@ describe("agent output", () => {
     expect(FitAnalysisSchema.safeParse({ ...fit, strengths: [{ claim: "TypeScript" }] }).success).toBe(false);
   });
 
+  it("rejects a fit analysis with no strengths, gaps, or concerns", () => {
+    expect(FitAnalysisSchema.safeParse({ ...fit, strengths: [], gaps: [], concerns: [] }).success).toBe(false);
+    expect(FitAnalysisSchema.safeParse({ ...fit, strengths: [], gaps: ["No professional React evidence supplied"], concerns: [] }).success).toBe(true);
+  });
+
   it("requires original fact references in résumé bullet suggestions", () => {
     expect(ResumeSuggestionsSchema.safeParse({
       summary: "Full-stack developer",

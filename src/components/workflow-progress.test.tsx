@@ -5,9 +5,28 @@ import { JobStatusControl, WorkflowProgress } from "./workflow-progress";
 afterEach(cleanup);
 
 describe("WorkflowProgress", () => {
+  it("defaults regeneration to local Ollama and submits that selection", async () => {
+    const onAnalyze = vi.fn().mockResolvedValue({ ok: true, data: {} });
+    render(<WorkflowProgress jobId={4} runs={[]} onAnalyze={onAnalyze} />);
+    expect(screen.getByRole("radio", { name: /ollama/i })).toBeChecked();
+    fireEvent.click(screen.getByRole("button", { name: /run or regenerate/i }));
+    await waitFor(() => expect(onAnalyze).toHaveBeenCalledOnce());
+    expect(onAnalyze.mock.calls[0][0].get("providerKind")).toBe("ollama");
+  });
+
+  it("shows only the latest attempt and leaves its blocked downstream step pending", () => {
+    render(<WorkflowProgress jobId={4} latestAttemptId={2} runs={[
+      { id: 5, jobId: 4, attemptId: 2, kind: "resume", provider: "mock", model: "fixture", profileVersion: 1, status: "failed", error: "Could not generate", startedAt: "2026-01-02", finishedAt: "2026-01-02" },
+      { id: 4, jobId: 4, attemptId: 2, kind: "fit", provider: "mock", model: "fixture", profileVersion: 1, status: "complete", error: null, startedAt: "2026-01-02", finishedAt: "2026-01-02" },
+      { id: 3, jobId: 4, attemptId: 1, kind: "application", provider: "mock", model: "fixture", profileVersion: 1, status: "complete", error: null, startedAt: "2026-01-01", finishedAt: "2026-01-01" },
+    ]} />);
+    expect(screen.getByText("Application draft").closest("li")).toHaveTextContent("not started");
+    expect(screen.getByText("Application draft").closest("li")).not.toHaveTextContent("complete");
+  });
+
   it("offers a retry for the failed résumé step", () => {
     render(<WorkflowProgress jobId={4} runs={[{
-      id: 1, jobId: 4, kind: "resume", provider: "mock", model: "fixture", profileVersion: 1,
+      id: 1, jobId: 4, attemptId: 1, kind: "resume", provider: "mock", model: "fixture", profileVersion: 1,
       status: "failed", error: "Could not generate", startedAt: "2026-01-01", finishedAt: "2026-01-01",
     }]} />);
     expect(screen.getByRole("button", { name: /retry résumé agent/i })).toBeVisible();

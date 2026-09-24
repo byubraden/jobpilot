@@ -23,4 +23,12 @@ describe("result review", () => {
     expect(screen.getByText("What is your start date?")).toBeVisible();
     expect(screen.getByText(/needs your input/i)).toBeVisible();
   });
+
+  it("labels a retained same-profile draft as belonging to a previous attempt", () => {
+    render(<ApplicationDraftView result={{ payload: {
+      coverLetter: "Old draft", answers: [], needsUserInput: [],
+    }, profileVersion: 2, isStale: true, isPreviousAttempt: true }} />);
+    expect(screen.getByText(/^previous analysis attempt/i)).toBeVisible();
+    expect(screen.getByText(/regenerate analysis before using it/i)).toBeVisible();
+  });
 });
