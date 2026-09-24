@@ -47,7 +47,7 @@ let container: ServiceContainer | undefined;
 export function getServices(): ServiceContainer {
   if (container) return container;
   const configuredPath = process.env.DATABASE_PATH ?? "./data/jobpilot.sqlite";
-  const path = configuredPath === ":memory:" ? configuredPath : resolve(configuredPath);
+  const path = configuredPath === ":memory:" ? configuredPath : resolve(/* turbopackIgnore: true */ configuredPath);
   if (path !== ":memory:") mkdirSync(dirname(path), { recursive: true });
   const db = createDatabase(path);
   const profiles = new ProfileRepository(db);
