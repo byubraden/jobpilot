@@ -148,10 +148,11 @@ describe("JobService", () => {
     expect(detail?.fit?.payload.score).toBe(82);
   });
 
-  it("requires explicit provider selection and does not substitute a live provider", () => {
+  it("creates only the explicitly selected local provider", () => {
+    vi.stubEnv("ANTHROPIC_API_KEY", "");
     expect(createProvider("mock").kind).toBe("mock");
-    expect(() => createProvider("ollama")).toThrow(/not yet configured/i);
-    expect(() => createProvider("anthropic")).toThrow(/not yet configured/i);
+    expect(createProvider("ollama").kind).toBe("ollama");
+    expect(() => createProvider("anthropic")).toThrow(/API key/i);
   });
 });
 

@@ -1,6 +1,8 @@
 import { mkdirSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { MockProvider } from "../ai/mock-provider";
+import { OllamaProvider } from "../ai/ollama-provider";
+import { AnthropicProvider } from "../ai/anthropic-provider";
 import type { AIProvider } from "../ai/provider";
 import { createDatabase } from "../db/connection";
 import {
@@ -17,9 +19,14 @@ export type ProviderSelectionKind = "ollama" | "anthropic" | "mock";
 export function createProvider(providerKind: ProviderSelectionKind): AIProvider {
   switch (providerKind) {
     case "mock": return new MockProvider();
-    case "ollama":
-    case "anthropic":
-      throw new Error(`${providerKind} provider is not yet configured.`);
+    case "ollama": return new OllamaProvider({
+      baseUrl: process.env.OLLAMA_BASE_URL,
+      model: process.env.OLLAMA_MODEL,
+    });
+    case "anthropic": return new AnthropicProvider({
+      apiKey: process.env.ANTHROPIC_API_KEY ?? "",
+      model: process.env.ANTHROPIC_MODEL,
+    });
     default:
       throw new Error("Unknown AI provider selection.");
   }
