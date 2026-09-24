@@ -1,5 +1,5 @@
 import Anthropic from "@anthropic-ai/sdk";
-import { z } from "zod";
+import { zodOutputFormat } from "@anthropic-ai/sdk/helpers/zod";
 import { AIUnavailableError, AIValidationError, type AIProvider, type AIRequest, type AIResponse } from "./provider";
 
 type AnthropicOptions = { apiKey: string; model?: string; fetch?: typeof globalThis.fetch; timeoutMs?: number };
@@ -28,7 +28,7 @@ export class AnthropicProvider implements AIProvider {
         max_tokens: 4096,
         system: request.system,
         messages: [{ role: "user", content: request.prompt }],
-        output_config: { format: { type: "json_schema", schema: z.toJSONSchema(request.schema) } },
+        output_config: { format: zodOutputFormat(request.schema) },
       });
     } catch {
       throw new AIUnavailableError();

@@ -191,9 +191,32 @@ describe("AnthropicProvider", () => {
     expect(body).toMatchObject({
       model: "claude-haiku-4-5-20251001", system: "policy", max_tokens: expect.any(Number),
       messages: [{ role: "user", content: "job and profile" }],
-      output_config: { format: { type: "json_schema", schema: {
-        type: "object", properties: { answer: { type: "string", minLength: 1 } }, required: ["answer"],
-      } } },
+      output_config: { format: { type: "json_schema" } },
+    });
+  });
+
+  it("sends constrained fields in the SDK-compatible structured output schema", async () => {
+    const constrainedSchema = z.strictObject({
+      label: z.string().min(2),
+      score: z.int().min(0).max(100),
+    });
+    const fetch = vi.fn<typeof globalThis.fetch>().mockResolvedValue(new Response(JSON.stringify(
+      anthropicMessage('{"label":"ready","score":82}'),
+    ), { status: 200, headers: { "content-type": "application/json" } }));
+
+    const result = await new AnthropicProvider({ apiKey: "sk-test", fetch }).generate(request("fit", constrainedSchema));
+
+    expect(result.data).toEqual({ label: "ready", score: 82 });
+    const body = JSON.parse(fetch.mock.calls[0][1]?.body as string);
+    expect(body.output_config.format.schema).toEqual({
+      type: "object",
+      properties: {
+        label: { type: "string", description: "{minLength: 2}" },
+        score: { type: "integer", description: "{minimum: 0, maximum: 100}" },
+      },
+      additionalProperties: false,
+      required: ["label", "score"],
+      description: '{$schema: "https://json-schema.org/draft/2020-12/schema"}',
     });
   });
 
