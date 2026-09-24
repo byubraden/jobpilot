@@ -1,10 +1,53 @@
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { JobStatusControl, WorkflowProgress } from "./workflow-progress";
+import { MockProvider } from "../lib/ai/mock-provider";
+import { createDatabase } from "../lib/db/connection";
+import {
+  AgentRunRepository, ApplicationDraftRepository, FitAnalysisRepository, JobRepository,
+  ProfileRepository, ResumeSuggestionsRepository,
+} from "../lib/db/repositories";
+import { JobService } from "../lib/services/job-service";
+import { JobWorkflowCoordinator } from "../lib/workflow/coordinator";
 
 afterEach(cleanup);
 
 describe("WorkflowProgress", () => {
+  it("renders reused fit as complete after a successful résumé retry", async () => {
+    const db = createDatabase(":memory:");
+    try {
+      const profiles = new ProfileRepository(db);
+      const jobs = new JobRepository(db);
+      const runs = new AgentRunRepository(db);
+      const fitResults = new FitAnalysisRepository(db);
+      const resumeResults = new ResumeSuggestionsRepository(db);
+      const applicationDrafts = new ApplicationDraftRepository(db);
+      let provider = new MockProvider({ errors: { resume: new Error("offline") } });
+      const service = new JobService({
+        profiles, jobs, runs, fitResults, resumeResults, applicationDrafts,
+        createCoordinator() {
+          return new JobWorkflowCoordinator({ provider, profiles, jobs, runs, fitResults, resumeResults, applicationDrafts });
+        },
+      });
+      profiles.save({
+        headline: "Developer", education: ["MS Information Systems"], internships: [], projects: [],
+        skills: ["TypeScript"], resumeText: "Built a web application.",
+      });
+      const created = await service.createJob({ description: "A TypeScript web development role. ".repeat(8) }, "mock");
+      provider = new MockProvider();
+      const retried = await service.retryAgent(created.job.id, "resume", "mock");
+      if (!retried.detail) throw new Error("Expected stored job detail");
+
+      render(<WorkflowProgress jobId={created.job.id} runs={retried.detail.runs} latestAttemptId={retried.detail.latestAttemptId} />);
+
+      expect(screen.getByText("Fit analysis").closest("li")).toHaveTextContent("complete");
+      expect(screen.getByText("Résumé agent").closest("li")).toHaveTextContent("complete");
+      expect(screen.getByText("Application draft").closest("li")).toHaveTextContent("complete");
+    } finally {
+      db.close();
+    }
+  });
+
   it("defaults regeneration to local Ollama and submits that selection", async () => {
     const onAnalyze = vi.fn().mockResolvedValue({ ok: true, data: {} });
     render(<WorkflowProgress jobId={4} runs={[]} onAnalyze={onAnalyze} />);

@@ -182,6 +182,51 @@ describe("JobService", () => {
       .toEqual(["failed", "complete"]);
   });
 
+  it("keeps fit current and complete after a successful résumé retry", async () => {
+    provider = new MockProvider({ errors: { resume: new Error("offline") } });
+    const created = await service.createJob({ description }, "mock");
+    provider = new MockProvider();
+
+    const retried = await service.retryAgent(created.job.id, "resume", "mock");
+    const detail = retried.detail;
+    if (!detail) throw new Error("Expected stored job detail");
+
+    expect(retried.workflow.steps.map((step) => step.status)).toEqual(["complete", "complete", "complete"]);
+    expect(detail.fit).toMatchObject({ isStale: false, isPreviousAttempt: false });
+    expect(detail.resume).toMatchObject({ isStale: false, isPreviousAttempt: false });
+    expect(detail.application).toMatchObject({ isStale: false, isPreviousAttempt: false });
+    expect(new Set(detail.runs.map((run) => run.attemptId))).toEqual(new Set([1]));
+  });
+
+  it("keeps fit and résumé current after an application-only retry", async () => {
+    provider = new MockProvider({ errors: { application: new Error("offline") } });
+    const created = await service.createJob({ description }, "mock");
+    provider = new MockProvider();
+
+    const retried = await service.retryAgent(created.job.id, "application", "mock");
+    if (!retried.detail) throw new Error("Expected stored job detail");
+
+    expect(retried.workflow.steps.map((step) => step.status)).toEqual(["complete", "complete", "complete"]);
+    expect(retried.detail.fit).toMatchObject({ isStale: false, isPreviousAttempt: false });
+    expect(retried.detail.resume).toMatchObject({ isStale: false, isPreviousAttempt: false });
+    expect(retried.detail.application).toMatchObject({ isStale: false, isPreviousAttempt: false });
+    expect(new Set(retried.detail.runs.map((run) => run.attemptId))).toEqual(new Set([1]));
+  });
+
+  it("keeps valid fit visible through repeated failed résumé retries", async () => {
+    provider = new MockProvider({ errors: { resume: new Error("offline") } });
+    const created = await service.createJob({ description }, "mock");
+
+    await service.retryAgent(created.job.id, "resume", "mock");
+    const retried = await service.retryAgent(created.job.id, "resume", "mock");
+    if (!retried.detail) throw new Error("Expected stored job detail");
+
+    expect(retried.workflow.steps.map((step) => step.status)).toEqual(["complete", "failed", "pending"]);
+    expect(retried.detail.fit).toMatchObject({ isStale: false, isPreviousAttempt: false });
+    expect(retried.detail.runs.find((run) => run.kind === "resume")).toMatchObject({ status: "failed", attemptId: 1 });
+    expect(new Set(retried.detail.runs.map((run) => run.attemptId))).toEqual(new Set([1]));
+  });
+
   it("creates only the explicitly selected local provider", () => {
     vi.stubEnv("ANTHROPIC_API_KEY", "");
     expect(createProvider("mock").kind).toBe("mock");

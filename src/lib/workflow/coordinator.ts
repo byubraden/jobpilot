@@ -70,7 +70,8 @@ export class JobWorkflowCoordinator {
       for (const run of this.dependencies.runs.listForJob(jobId)) {
         if (!latestRuns.has(run.kind)) latestRuns.set(run.kind, run);
       }
-      if (latestRuns.get(kind)?.status !== "failed") {
+      const failedRun = latestRuns.get(kind);
+      if (failedRun?.status !== "failed") {
         throw new Error(`No failed ${kind} step to retry for job ${jobId}`);
       }
       for (const priorKind of sequence.slice(0, startIndex)) {
@@ -81,7 +82,7 @@ export class JobWorkflowCoordinator {
           throw new Error(`Cannot retry ${kind} without a completed ${priorKind} step for the current profile`);
         }
       }
-      return this.execute(jobId, profile, job, startIndex);
+      return this.execute(jobId, profile, job, startIndex, failedRun.attemptId);
     });
   }
 
@@ -117,8 +118,9 @@ export class JobWorkflowCoordinator {
     profile: CandidateProfileRecord,
     job: JobRecord,
     startIndex: number,
+    existingAttemptId?: number,
   ): Promise<WorkflowResult> {
-    const attemptId = this.dependencies.runs.nextAttemptId(jobId);
+    const attemptId = existingAttemptId ?? this.dependencies.runs.nextAttemptId(jobId);
     const steps: WorkflowStep[] = sequence.map((kind, index) => ({
       kind,
       status: index < startIndex ? "complete" : "pending",
