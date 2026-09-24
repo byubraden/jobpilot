@@ -16,7 +16,15 @@ This log records factual evidence for the assignment report. Times use America/D
 - Start: 2026-09-23 14:19:07 MDT.
 - Task 1 dispatched to the foundation implementation subagent after creating the isolated `feature/jobpilot-mvp` worktree and completing the dependency/interface preflight scan.
 
-The coordinator will append the end timestamp, verification results, failures, corrections, model calls, and review outcomes here during execution.
+### Timed evidence from Git checkpoints
+
+The following are local MDT timestamps from `git log --date=iso-strict`. Commit timestamps mark completed checkpoints; they do not measure every minute of hands-on work.
+
+- `c7dccff` committed the product spec at 2026-09-23 14:06:31. `21a5ace` committed the coordinator-led plan at 14:14:50. The recorded build-session start was 14:19:07.
+- From the spec checkpoint at 14:06:31 through the UI correction `fa62dc0` at 16:03:46, 18 commits record planning and implementation across **1 hour 57 minutes 15 seconds**. This is a checkpoint-spanned interval, not a continuous-work timer.
+- Provider integration `19c292b` at 19:01:09 and its Claude schema correction `f9322b8` at 19:06:37 bracket another **5 minutes 28 seconds** of same-day activity. The unobserved 16:03:46–19:01:09 gap (**2 hours 57 minutes 23 seconds**) is excluded.
+- These two same-day checkpoint spans total **2 hours 2 minutes 43 seconds** of documented project activity, including specification and planning. This supports the assignment's two-hour threshold at checkpoint resolution; it does not prove uninterrupted keyboard time. No overnight idle time is counted.
+- The next commit, `c150788`, was at 2026-09-24 08:05:47. The overnight gap since `f9322b8` is excluded. The Task 8 live Ollama event below supplies separate millisecond-precision timing for one model run, not the whole development session.
 
 ## 2026-09-24 — Task 8 browser and live-model smoke
 
@@ -27,3 +35,7 @@ The coordinator will append the end timestamp, verification results, failures, c
 - Exact run start: `2026-09-24T13:58:36.856Z` (`07:58:36.856 MDT`). End: `2026-09-24T14:01:36.793Z` (`08:01:36.793 MDT`). Elapsed browser submission time: **179.9 seconds**. The server reported `createJobAction` at 179323 ms. No retries were needed or attempted. The temporary database recorded exactly three complete `agent_runs`, one each for fit, résumé, and application, all with provider `ollama`, model `qwen3:8b`, and no error.
 - Observed quality: the fit result extracted “Junior Software Engineer,” “Example Company,” remote location, and the posting's TypeScript/React/API skills. Its displayed score was **0/100** while its recommendation was **“strong”**. Both values were accepted by the current structured schema; their contradiction means this score should not be trusted without review. Résumé suggestions reflected the sample coursework and noted the lack of practical experience. The application draft referenced the posting and explicitly acknowledged missing internship/project experience. These are observations of one local generation, not reliability claims.
 - After stopping and restarting the development server with the same database, `/jobs/1` loaded and showed all three workflow steps as complete and the fit section visible. The temporary browser driver was removed after the run. Claude was not invoked.
+
+## 2026-09-24 — Task 9 report decision
+
+- At the user's direction, the planned external Claude cold review was skipped for now. No Claude review request was sent, so it produced no findings, token usage, or API cost. `docs/COLD_REVIEW.md` records the deferral. The local Ollama score/recommendation contradiction remains an open semantic-coherence concern for final product review; no arbitrary threshold was added.
