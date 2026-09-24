@@ -8,10 +8,11 @@ JobPilot is a local-first web app for saving pasted job descriptions, preparing 
 
 ## Techniques I Used
 
+- **Worktree-based Development:** Implementation took place in the `feature/jobpilot-mvp` worktree, separate from `main`. This isolated the project changes while the coordinator integrated them; it was process infrastructure, not a product feature.
 - **Spec-Driven Development:** The approved product plan set the workflow, privacy boundaries, and 12 acceptance criteria before implementation. A nine-task plan gave each development subagent defined files and checks.
 - **Subagents and a Coordinator Agent:** The development coordinator assigned bounded tasks, reviewed contributions, and integrated the pieces. This development workflow is distinct from JobPilot's runtime coordinator and three bounded AI agents.
-- **Vibe Coding:** The user shaped the scope and provider choices while AI-assisted implementation produced working increments. The user chose a local-first MVP and deferred automatic discovery and submission; those choices constrained what the agents built.
-- **Worktree isolation:** Implementation took place in the `feature/jobpilot-mvp` worktree, separate from `main`. This was process infrastructure, not a product feature.
+
+The log also records a limited Vibe Coding style: conversational decisions shaped the local-first scope, provider choices, and deferral of automatic discovery and submission while AI agents implemented the plan. It does not record the user reviewing each working UI increment or a complete user-feedback loop, so I cannot claim that part of the technique was exercised.
 
 ## What Helped
 
@@ -27,7 +28,7 @@ The one recorded live `qwen3:8b` Ollama run took **179.9 seconds** to submit thr
 
 ## What I Learned
 
-Structured output validation checks format and ranges but does not guarantee that fields agree. Persisting each step and its profile version made partial failures and stale results reviewable. A deterministic coordinator kept model work bounded, while test-first regressions and integrated browser checks exposed problems at different boundaries. The experiment log's commit checkpoints document just over two hours of same-day planning and implementation spans; long idle gaps are excluded, and those spans are not a stopwatch measure of continuous work.
+Structured output validation checks format and ranges but does not guarantee that fields agree. Persisting each step and its profile version made partial failures and stale results reviewable. A deterministic coordinator kept model work bounded, while test-first regressions and integrated browser checks exposed problems at different boundaries. The experiment log's same-day project checkpoint windows, including approved spec and planning work, total just over two hours. Long idle gaps are excluded; the windows do not prove continuous keyboard work.
 
 ## What I Would Do Next
 
